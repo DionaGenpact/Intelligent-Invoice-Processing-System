@@ -1,0 +1,4 @@
+invoice_file: invoice.pdf
+vendor_id: VENDOR_001
+po_number: PO_12345
+expected_currency: EUR
