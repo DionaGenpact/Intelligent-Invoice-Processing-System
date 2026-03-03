@@ -1,11 +1,12 @@
+import os
+import json
 from utils.run_manager import create_run_directory
 from utils.audit_logger import log_step
 from utils.schema_validator import validate_json
 from agents.intake_agent import run_intake
 from agents.validation_agent import run_validation
-import os
-import json
-
+from agents.extraction_agent import run_extraction
+from agents.normalization_agent import run_normalization
 
 def run_pipeline(bundle_path):
     run_id, run_path = create_run_directory()
@@ -44,6 +45,16 @@ def run_pipeline(bundle_path):
 
     if not is_valid:
         log_step(run_path, "Pipeline stopped due to validation failure")
+        return
+
+    #Step 3: Extraction
+    extracted_data = run_extraction(bundle_path, run_path, context)
+
+    #Step 4: Normalization
+    is_normalized, norm_result = run_normalization(run_path, extracted_data)
+
+    if not is_normalized:
+        log_step(run_path, "Pipeline stopped due to normalization failure")
         return
 
     log_step(run_path, "Pipeline finished successfully")
