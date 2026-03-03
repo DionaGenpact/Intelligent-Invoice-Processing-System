@@ -1,0 +1,15 @@
+approval_thresholds:
+  manager: 1000
+  finance: 5000
+  director: 10000
+
+routing_rules:
+  new_vendor: finance
+  bank_change: finance
+  high_risk: director
+  variance_within_tolerance: manager
+
+auto_post_conditions:
+  require_match: true
+  require_no_compliance_issues: true
+  require_low_risk: true
