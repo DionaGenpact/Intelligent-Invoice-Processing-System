@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FindingsList",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id", "agent", "type", "impact", "confidence", "summary", "recommendation", "evidence", "assumptions"],
+    "properties": {
+      "id": { "type": "string" },
+      "agent": { "type": "string" },
+      "type": { "type": "string" },
+      "impact": { "type": "string", "enum": ["high", "medium", "low"] },
+      "confidence": { "type": "number", "minimum": 0, "maximum": 1, "multipleOf": 0.01 },
+      "summary": { "type": "string" },
+      "recommendation": { "type": "string" },
+      "evidence": { "type": "array", "items": { "type": "string" } },
+      "assumptions": { "type": "array", "items": { "type": "string" } }
+    },
+    "additionalProperties": false
+  }
+}

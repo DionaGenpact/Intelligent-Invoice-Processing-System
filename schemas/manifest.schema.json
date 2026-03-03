@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Manifest",
+  "description": "Schema for invoice bundle manifest input",
+  "type": "object",
+  "required": ["invoice_file", "vendor_id", "po_number", "expected_currency"],
+  "properties": {
+    "invoice_file": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Name of invoice file inside bundle"
+    },
+    "vendor_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "po_number": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "expected_currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "ISO 4217 currency code"
+    }
+  },
+  "additionalProperties": false
+}
