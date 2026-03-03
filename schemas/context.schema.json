@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Context",
+  "description": "Runtime context shared across pipeline agents",
+  "type": "object",
+  "required": [
+    "bundle_path",
+    "manifest",
+    "validation_result",
+    "extraction_result",
+    "policy_result",
+    "decision_result",
+    "evidence_index"
+  ],
+  "properties": {
+    "bundle_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "manifest": {
+      "$ref": "manifest.schema.json"
+    },
+    "validation_result": {
+      "type": "object"
+    },
+    "extraction_result": {
+      "type": "object"
+    },
+    "policy_result": {
+      "type": "object"
+    },
+    "decision_result": {
+      "type": "object"
+    },
+    "evidence_index": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}
