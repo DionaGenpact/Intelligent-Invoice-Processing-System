@@ -10,7 +10,9 @@
     "extraction_result",
     "policy_result",
     "decision_result",
-    "evidence_index"
+    "evidence_index",
+    "risk_flags",
+    "ignored_files"
   ],
   "properties": {
     "bundle_path": {
@@ -34,6 +36,14 @@
     },
     "evidence_index": {
       "type": "object"
+    },
+    "risk_flags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "ignored_files": {
+      "type": "array",
+      "items": { "type": "string" }
     }
   },
   "additionalProperties": false
