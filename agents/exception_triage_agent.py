@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-import json  # REQ: deterministic artifacts
-import os    # REQ: file-based model (runs/)
+import json 
+import os    
 from typing import Any, Dict, List, Optional, Tuple
 
-import yaml  # REQ: policy-driven routing decisions
+import yaml  
 
-from utils.audit_logger import log_step  # REQ: audit trail
-
+from utils.audit_logger import log_step  
 
 def run_exception_triage(bundle_path: str, run_path: str, context: Dict[str, Any]) -> Dict[str, Any]:
-    log_step(run_path, "Exception Triage (H) started")  # REQ: audit start
+    log_step(run_path, "Exception Triage (H) started")  
 
     # REQ: consolidate outputs from Agents D/E/F/G (best-effort if not wired yet)
     validation = context.get("validation_result") or _load_json(os.path.join(run_path, "validation.json")) or {}
@@ -37,7 +36,6 @@ def run_exception_triage(bundle_path: str, run_path: str, context: Dict[str, Any
      
     # REQ: Exception Categorization - convert findings into standardized exceptions
      
-
     # REQ: compliance exceptions
     for f in (compliance.get("findings") or []):
         exceptions.append({

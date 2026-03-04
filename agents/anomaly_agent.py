@@ -1,14 +1,14 @@
 # agents/anomaly_agent.py Agent G - Compliance & Risk Detection (Duplicate + Anomaly)
 from __future__ import annotations
 
-import json  # REQ: deterministic artifact output
-import os    # REQ: file-based model (bundles, runs)
-import difflib  # REQ: similarity measure (simple, deterministic)
+import json  
+import os    
+import difflib  
 from typing import Any, Dict, List, Optional
 
-import yaml  # REQ: policy-driven thresholds
+import yaml  
 
-from utils.audit_logger import log_step  # REQ: audit trail
+from utils.audit_logger import log_step  
 
 
 def run_anomaly_detection(bundle_path: str, run_path: str, context: Dict[str, Any]) -> Dict[str, Any]:

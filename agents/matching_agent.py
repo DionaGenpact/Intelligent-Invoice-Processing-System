@@ -1,14 +1,14 @@
 # agents/matching_agent.py
-from __future__ import annotations  # REQ: code hygiene (type hints, clarity)
+from __future__ import annotations  
 
-import json  # REQ: read/write deterministic artifacts (match_result.json)
-import os    # REQ: file-based deterministic run model (runs/, bundles/)
-import re    # REQ: normalize descriptions for matching when no SKU/item_id
-from typing import Any, Dict, List, Optional, Tuple  # REQ: structured outputs
+import json  
+import os    
+import re    
+from typing import Any, Dict, List, Optional, Tuple  
 
-import yaml  # REQ: policy-driven tolerances (YAML policy pack)
+import yaml  
 
-from utils.audit_logger import log_step  # REQ: Audit Trail / traceability
+from utils.audit_logger import log_step  
 
 
 def run_matching(bundle_path: str, run_path: str, context: Dict[str, Any]) -> Dict[str, Any]:
