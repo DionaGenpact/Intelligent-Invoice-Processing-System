@@ -1,0 +1,17 @@
+risk_weights:
+  duplicate_invoice: 100
+  bank_change: 70
+  new_vendor: 50
+  high_amount: 40
+  low_confidence_ocr: 30
+
+risk_levels:
+  low:
+    min: 0
+    max: 40
+  medium:
+    min: 41
+    max: 70
+  high:
+    min: 71
+    max: 100

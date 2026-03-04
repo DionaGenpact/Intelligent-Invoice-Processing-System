@@ -1,0 +1,13 @@
+jurisdiction: EU
+
+required_fields:
+  - invoice_number
+  - invoice_date
+  - vendor_name
+  - vendor_vat
+  - total_amount
+  - currency
+
+vat_rules:
+  standard_rate: 20
+  allow_zero_vat: false

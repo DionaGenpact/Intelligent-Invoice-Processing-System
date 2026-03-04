@@ -1,0 +1,4 @@
+tolerances:
+  price_variance_percent: 5
+  quantity_variance_percent: 5
+  total_variance_percent: 2
