@@ -1,0 +1,28 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "FinalDecision",
+    "description": "Final orchestration decision for a run, used for auditability and deterministic re-runs.",
+    "type": "object",
+    "required": ["run_id", "decision", "created_at", "artifacts"],
+    "properties": {
+      "run_id": { "type": "string" },
+      "created_at": { "type": "string" },
+      "decision": { "type": "string", "enum": ["AUTO_POST", "ROUTE", "BLOCK"] },
+      "route_to": { "type": ["string", "null"] },
+      "risk_level": { "type": ["string", "null"], "enum": ["LOW", "MEDIUM", "HIGH", null] },
+      "reasons": { "type": "array", "items": { "type": "string" } },
+      "summary": {
+        "type": "object",
+        "properties": {
+          "total_exceptions": { "type": "integer", "minimum": 0 },
+          "by_severity": { "type": "object" },
+          "by_category": { "type": "object" }
+        },
+        "additionalProperties": true
+      },
+      "artifacts": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+    },
+    "additionalProperties": false
+  }
+  
+  

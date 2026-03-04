@@ -1,0 +1,52 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "ExtractedInvoice",
+    "description": "Structured invoice extracted from PDF/image. Includes header, line items, and confidence per field.",
+    "type": "object",
+    "required": ["header", "line_items", "confidence"],
+    "properties": {
+      "header": {
+        "type": "object",
+        "required": ["invoice_number", "vendor_id", "currency", "total_amount"],
+        "properties": {
+          "invoice_number": { "type": ["string", "null"] },
+          "vendor_id": { "type": ["string", "null"] },
+          "vendor_name": { "type": ["string", "null"] },
+          "invoice_date": { "type": ["string", "null"] },
+          "currency": { "type": ["string", "null"] },
+          "total_amount": { "type": ["number", "string", "null"] },
+          "vat_rate": { "type": ["number", "string", "null"] },
+          "vendor_vat": { "type": ["string", "null"] },
+          "bank_account": { "type": ["string", "null"] }
+        },
+        "additionalProperties": true
+      },
+      "line_items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["line_number", "description", "quantity", "unit_price", "line_total"],
+          "properties": {
+            "line_number": { "type": ["integer", "number"] },
+            "description": { "type": ["string", "null"] },
+            "quantity": { "type": ["number", "string", "null"] },
+            "unit_price": { "type": ["number", "string", "null"] },
+            "line_total": { "type": ["number", "string", "null"] },
+            "sku": { "type": ["string", "null"] },
+            "item_id": { "type": ["string", "null"] }
+          },
+          "additionalProperties": true
+        }
+      },
+      "confidence": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "additionalProperties": false
+  }
+  

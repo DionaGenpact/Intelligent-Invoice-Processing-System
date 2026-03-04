@@ -1,0 +1,16 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "PolicyResult",
+    "description": "Snapshot of the policy inputs and computed risk classification used for audit/debug.",
+    "type": "object",
+    "required": ["risk_score", "risk_level"],
+    "properties": {
+      "jurisdiction": { "type": ["string", "null"] },
+      "required_fields": { "type": "array", "items": { "type": "string" } },
+      "vat_rules": { "type": "object" },
+      "risk_score": { "type": "integer", "minimum": 0, "maximum": 100 },
+      "risk_level": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] }
+    },
+    "additionalProperties": true
+  }
+  

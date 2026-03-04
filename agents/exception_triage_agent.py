@@ -74,18 +74,29 @@ def run_exception_triage(bundle_path: str, run_path: str, context: Dict[str, Any
                 "evidence": chk,
             })
 
-    # (Optional) Validation errors → exceptions (keeps it simple)
-    for v in (validation.get("issues") or []):
-        if isinstance(v, dict):
-            exceptions.append({
-                "category": "VALIDATION",
-                "source": "validation",
-                "code": v.get("code", "VALIDATION_ISSUE"),
-                "severity": str(v.get("severity", "MEDIUM")).upper(),
-                "message": v.get("message", "Validation issue detected."),
-                "recommendation": v.get("recommendation", "Fix validation issue or route for review."),
-                "evidence": v,
-            })
+    # Validation errors → exceptions (supports current validation.json schema)
+    # validation.schema.json defines: {is_valid, errors: [str], warnings: [str]}
+    for msg in (validation.get("errors") or []):
+        exceptions.append({
+            "category": "VALIDATION",
+            "source": "validation",
+            "code": "VALIDATION_ERROR",
+            "severity": "HIGH",
+            "message": str(msg),
+            "recommendation": "Fix manifest/bundle issues and re-run.",
+            "evidence": {"validation_error": msg},
+        })
+
+    for msg in (validation.get("warnings") or []):
+        exceptions.append({
+            "category": "VALIDATION",
+            "source": "validation",
+            "code": "VALIDATION_WARNING",
+            "severity": "LOW",
+            "message": str(msg),
+            "recommendation": "Review warning and confirm if action is needed.",
+            "evidence": {"validation_warning": msg},
+        })
 
      
     # REQ: Approval Packet (routing + follow-up details)

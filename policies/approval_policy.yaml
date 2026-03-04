@@ -1,5 +1,5 @@
 approval_thresholds:
-  manager: 1000
+  manager: 500
   finance: 5000
   director: 10000
 
