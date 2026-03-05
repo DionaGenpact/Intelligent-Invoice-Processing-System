@@ -1,0 +1,26 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "DecisionResult",
+    "description": "Final decision produced by Agent I",
+    "type": "object",
+    "required": ["status", "reasons"],
+    "properties": {
+      "status": {
+        "type": "string",
+        "enum": ["APPROVE", "REVIEW", "REJECT"]
+      },
+      "reasons": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "risk_flags": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "ignored_files_count": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "additionalProperties": false
+  }
