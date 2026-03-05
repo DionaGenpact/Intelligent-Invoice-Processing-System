@@ -9,6 +9,7 @@ from agents.intake_agent import run_intake
 from agents.validation_agent import run_validation
 from agents.extraction_agent import run_extraction
 from agents.normalization_agent import run_normalization
+from agents.invoice_validation_agent import run_invoice_validation
 
 
 def make_decision(context: dict) -> dict:
@@ -101,6 +102,21 @@ def run_pipeline(bundle_path):
         json.dump(context, f, indent=4)
 
     log_step(run_path, "Normalization completed")
+
+    # Step 4b: Invoice Validation (Agent D)
+    log_step(run_path, "Invoice Validation (Agent D) started")
+    is_invoice_valid, invoice_validation_result = run_invoice_validation(run_path, context)
+
+    context["invoice_validation_result"] = invoice_validation_result
+
+    with open(os.path.join(run_path, "context.json"), "w", encoding="utf-8") as f:
+        json.dump(context, f, indent=4)
+
+    if not is_invoice_valid:
+        log_step(run_path, "Pipeline stopped due to invoice validation failure")
+        return
+
+    log_step(run_path, "Invoice Validation completed")
 
     # Step 5: Decision (Agent I)
     decision = make_decision(context)
