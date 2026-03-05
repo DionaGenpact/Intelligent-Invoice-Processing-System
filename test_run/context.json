@@ -1,0 +1,65 @@
+{
+    "manifest": {
+        "invoice_file": "invoice.pdf",
+        "vendor_id": "VENDOR-123",
+        "expected_currency": "USD"
+    },
+    "extraction_result": {
+        "header": {
+            "invoice_number": "INV-001",
+            "invoice_date": "2025-01-01",
+            "vendor_id": "VENDOR-123",
+            "currency": "USD",
+            "total_amount": 100.0
+        },
+        "line_items": [
+            {
+                "line_number": 1,
+                "description": "Sample Item",
+                "quantity": 2,
+                "unit_price": 50.0,
+                "line_total": 100.0,
+                "page": 1
+            }
+        ],
+        "confidence": {
+            "fields": {
+                "invoice_number": 0.95,
+                "invoice_date": 0.9,
+                "vendor_id": 1.0,
+                "currency": 1.0,
+                "total_amount": 0.88
+            },
+            "line_items": [
+                {
+                    "line_number": 1,
+                    "confidence": 0.87
+                }
+            ]
+        },
+        "evidence": {
+            "invoice_number": {
+                "page": 1,
+                "bbox": [
+                    100,
+                    120,
+                    250,
+                    150
+                ]
+            },
+            "total_amount": {
+                "page": 1,
+                "bbox": [
+                    400,
+                    700,
+                    520,
+                    730
+                ]
+            }
+        },
+        "aggregation": {
+            "pages_processed": 1,
+            "multi_page_detected": false
+        }
+    }
+}
