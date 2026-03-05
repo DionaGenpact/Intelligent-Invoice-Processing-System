@@ -10,6 +10,7 @@ from agents.validation_agent import run_validation
 from agents.extraction_agent import run_extraction
 from agents.normalization_agent import run_normalization
 from agents.invoice_validation_agent import run_invoice_validation
+from agents.vendor_resolution_agent import run_vendor_resolution
 
 
 def make_decision(context: dict) -> dict:
@@ -103,22 +104,29 @@ def run_pipeline(bundle_path):
 
     log_step(run_path, "Normalization completed")
 
-    # Step 4b: Invoice Validation (Agent D)
+    # Step 5: Invoice Validation (Agent D detailed)
     log_step(run_path, "Invoice Validation (Agent D) started")
     is_invoice_valid, invoice_validation_result = run_invoice_validation(run_path, context)
-
     context["invoice_validation_result"] = invoice_validation_result
-
     with open(os.path.join(run_path, "context.json"), "w", encoding="utf-8") as f:
         json.dump(context, f, indent=4)
-
     if not is_invoice_valid:
         log_step(run_path, "Pipeline stopped due to invoice validation failure")
         return
-
     log_step(run_path, "Invoice Validation completed")
 
-    # Step 5: Decision (Agent I)
+    # Step 6: Vendor Resolution (Agent C)
+    log_step(run_path, "Vendor Resolution (Agent C) started")
+    vendor_resolution_result = run_vendor_resolution(run_path, context)
+    context["vendor_resolution_result"] = vendor_resolution_result
+    # Update risk_flags if high-risk vendor detected
+    if vendor_resolution_result.get("is_high_risk", False):
+        context.setdefault("risk_flags", []).append("HIGH_RISK_VENDOR")
+    with open(os.path.join(run_path, "context.json"), "w", encoding="utf-8") as f:
+        json.dump(context, f, indent=4)
+    log_step(run_path, "Vendor Resolution completed")
+
+    # Step 7: Decision (Agent I)
     decision = make_decision(context)
 
     decision_schema_errors = validate_json(decision, "schemas/decision.schema.json")
