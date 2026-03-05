@@ -1,0 +1,14 @@
+{
+    "extraction_result": {
+        "header": {
+            "vendor_id": "VEND002",
+            "vendor_name": "Global Supply Ltd"
+        }
+    },
+    "vendor_resolution": {
+        "invoice_vendor_id": "VEND002",
+        "invoice_vendor_name": "Global Supply Ltd",
+        "risk_flags": [],
+        "is_high_risk": false
+    }
+}
