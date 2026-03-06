@@ -1,0 +1,42 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "VendorResolution",
+    "type": "object",
+    "required": ["resolved", "match_method", "flags", "is_high_risk", "invoice_vendor"],
+    "properties": {
+      "resolved": { "type": "boolean" },
+      "match_method": { "type": "string", "enum": ["vendor_id", "vendor_name_fuzzy", "none"] },
+      "match_score": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+      "vendor_master": {
+        "type": ["object", "null"],
+        "properties": {
+          "vendor_id": { "type": "string" },
+          "vendor_name": { "type": "string" },
+          "bank_account": { "type": ["string", "null"] },
+          "vat_id": { "type": ["string", "null"] },
+          "is_high_risk": { "type": ["boolean", "null"] }
+        },
+        "additionalProperties": true
+      },
+      "invoice_vendor": {
+        "type": "object",
+        "required": ["vendor_id", "vendor_name"],
+        "properties": {
+          "vendor_id": { "type": "string" },
+          "vendor_name": { "type": "string" },
+          "bank_account": { "type": ["string", "null"] },
+          "vat_id": { "type": ["string", "null"] }
+        },
+        "additionalProperties": true
+      },
+      "flags": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": ["NEW_VENDOR", "VENDOR_NAME_MISSING", "VENDOR_NAME_MISMATCH", "VENDOR_BANK_CHANGE", "VENDOR_VAT_MISMATCH"]
+        }
+      },
+      "is_high_risk": { "type": "boolean" }
+    },
+    "additionalProperties": true
+  }

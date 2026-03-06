@@ -1,0 +1,84 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "ExtractedInvoice",
+    "type": "object",
+    "required": ["header", "line_items", "confidence", "evidence", "aggregation"],
+    "properties": {
+      "header": {
+        "type": "object",
+        "required": ["invoice_number", "invoice_date", "vendor_id", "vendor_name", "currency", "total_amount"],
+        "properties": {
+          "invoice_number": { "type": "string" },
+          "invoice_date": { "type": "string" },
+          "vendor_id": { "type": "string" },
+          "vendor_name": { "type": "string" },
+          "currency": { "type": "string" },
+          "total_amount": { "type": "number" }
+        },
+        "additionalProperties": true
+      },
+      "line_items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["line_number", "description", "quantity", "unit_price", "line_total", "page"],
+          "properties": {
+            "line_number": { "type": "integer" },
+            "description": { "type": "string" },
+            "quantity": { "type": "number" },
+            "unit_price": { "type": "number" },
+            "line_total": { "type": "number" },
+            "page": { "type": "integer" }
+          },
+          "additionalProperties": true
+        }
+      },
+      "confidence": {
+        "type": "object",
+        "required": ["fields", "line_items"],
+        "properties": {
+          "fields": {
+            "type": "object",
+            "additionalProperties": { "type": "number", "minimum": 0, "maximum": 1 }
+          },
+          "line_items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["line_number", "confidence"],
+              "properties": {
+                "line_number": { "type": "integer" },
+                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+              }
+            }
+          }
+        }
+      },
+      "evidence": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "required": ["page", "bbox", "source"],
+          "properties": {
+            "page": { "type": "integer" },
+            "bbox": {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 4,
+              "maxItems": 4
+            },
+            "source": { "type": "string", "enum": ["pdf_text", "ocr", "manifest"] }
+          }
+        }
+      },
+      "aggregation": {
+        "type": "object",
+        "required": ["pages_processed", "multi_page_detected"],
+        "properties": {
+          "pages_processed": { "type": "integer", "minimum": 1 },
+          "multi_page_detected": { "type": "boolean" }
+        }
+      }
+    },
+    "additionalProperties": false
+  }

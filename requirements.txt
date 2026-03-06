@@ -1,2 +1,4 @@
 PyYAML
 jsonschema
+fuzzywuzzy
+python-Levenshtein
