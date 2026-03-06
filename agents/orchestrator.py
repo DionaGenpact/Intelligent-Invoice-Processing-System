@@ -106,8 +106,7 @@ def run_pipeline(bundle_path):
 
     # Step 5: Invoice Validation (Agent D detailed)
     log_step(run_path, "Invoice Validation (Agent D) started")
-    is_invoice_valid, invoice_validation_result = run_invoice_validation(run_path, context)
-    context["invoice_validation_result"] = invoice_validation_result
+    is_invoice_valid, invoice_validation_result = run_invoice_validation(bundle_path, run_path, context)
     with open(os.path.join(run_path, "context.json"), "w", encoding="utf-8") as f:
         json.dump(context, f, indent=4)
     if not is_invoice_valid:
@@ -117,11 +116,12 @@ def run_pipeline(bundle_path):
 
     # Step 6: Vendor Resolution (Agent C)
     log_step(run_path, "Vendor Resolution (Agent C) started")
-    vendor_resolution_result = run_vendor_resolution(run_path, context)
+    vendor_resolution_result = run_vendor_resolution(bundle_path, run_path, context)
     context["vendor_resolution_result"] = vendor_resolution_result
-    # Update risk_flags if high-risk vendor detected
     if vendor_resolution_result.get("is_high_risk", False):
         context.setdefault("risk_flags", []).append("HIGH_RISK_VENDOR")
+    for f in vendor_resolution_result.get("flags", []):
+        context.setdefault("risk_flags", []).append(f)
     with open(os.path.join(run_path, "context.json"), "w", encoding="utf-8") as f:
         json.dump(context, f, indent=4)
     log_step(run_path, "Vendor Resolution completed")

@@ -1,0 +1,15 @@
+{
+    "vendors": [
+      {
+        "vendor_id": "VEND-001",
+        "vendor_name": "Acme Supplies GmbH",
+        "bank_account": "AT12 3456 7890 1234 5678",
+        "vat_id": "ATU12345678",
+        "is_high_risk": false
+      }
+    ],
+    "snapshot_meta": {
+      "as_of": "2026-03-06",
+      "source": "demo"
+    }
+  }
