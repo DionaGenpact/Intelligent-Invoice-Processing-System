@@ -1,2 +1,11 @@
 PyYAML
 jsonschema
+fuzzywuzzy
+python-Levenshtein
+
+pdfplumber
+pymupdf
+pytesseract # also needs to be downloaded outside pip
+Pillow
+opencv-python
+pdf2image

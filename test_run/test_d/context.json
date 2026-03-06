@@ -1,0 +1,26 @@
+{
+    "extraction_result": {
+        "header": {
+            "invoice_number": "INV-001",
+            "invoice_date": "2025-01-01",
+            "vendor_id": "VENDOR-123",
+            "currency": "USD",
+            "total_amount": 100.0
+        },
+        "line_items": [
+            {
+                "line_number": 1,
+                "description": "Sample Item",
+                "quantity": 2,
+                "unit_price": 50.0,
+                "line_total": 100.0
+            }
+        ]
+    },
+    "invoice_validation": {
+        "is_valid": true,
+        "errors": [],
+        "warnings": [],
+        "calculated_total": 100.0
+    }
+}

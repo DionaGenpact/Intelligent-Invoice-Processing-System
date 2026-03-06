@@ -1,0 +1,14 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "InvoiceValidation",
+    "type": "object",
+    "required": ["is_valid", "errors", "warnings", "calculated_total", "declared_total"],
+    "properties": {
+      "is_valid": { "type": "boolean" },
+      "errors": { "type": "array", "items": { "type": "string" } },
+      "warnings": { "type": "array", "items": { "type": "string" } },
+      "calculated_total": { "type": "number" },
+      "declared_total": { "type": ["number", "null"] }
+    },
+    "additionalProperties": true
+  }
