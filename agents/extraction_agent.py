@@ -3,18 +3,21 @@ import json
 import csv
 import re
 from typing import Dict, Any, List, Optional
+
 from utils.schema_validator import validate_json
+from utils.audit_logger import log_step
+
 import pytesseract
 from pytesseract import Output
 import pdfplumber
 import fitz
 from PIL import Image
 import io
-from utils.audit_logger import log_step
 
 pytesseract.pytesseract.tesseract_cmd = r"C:\Users\602000885\tesseract.exe"
 
 LOW_CONFIDENCE_THRESHOLD = 0.75
+
 
 def run_extraction(bundle_path: str, run_path: str, context: Dict[str, Any]) -> Dict[str, Any]:
     log_step(run_path, "Extraction (Agent B) started")
@@ -50,6 +53,7 @@ def run_extraction(bundle_path: str, run_path: str, context: Dict[str, Any]) -> 
 
     schema_path = os.path.join(os.path.dirname(__file__), "..", "schemas", "extraction.schema.json")
     schema_path = os.path.abspath(schema_path)
+
     schema_errors = validate_json(extracted_data, schema_path)
     if schema_errors:
         log_step(run_path, f"Extraction schema validation failed: {schema_errors}")
@@ -73,8 +77,10 @@ def run_extraction(bundle_path: str, run_path: str, context: Dict[str, Any]) -> 
     log_step(run_path, "Extraction (Agent B) completed")
     return extracted_data
 
+
 def _is_pdf(path: str) -> bool:
     return os.path.splitext(path)[1].lower() == ".pdf"
+
 
 def _parse_invoice(invoice_path: str) -> List[Dict[str, Any]]:
     if _is_pdf(invoice_path):
@@ -82,36 +88,63 @@ def _parse_invoice(invoice_path: str) -> List[Dict[str, Any]]:
         if _text_sufficient(pages):
             return pages
         return _ocr_pdf_pages(invoice_path)
-    else:
-        return [_ocr_image(invoice_path, page_number=1)]
+    return [_ocr_image(invoice_path, page_number=1)]
+
 
 def _extract_from_page(page: Dict[str, Any], manifest: Dict[str, Any]) -> Dict[str, Any]:
     tokens = page.get("tokens", [])
     page_number = page.get("page_number", 1)
 
     total = _find_total_amount(tokens)
-
     inv = _find_in_window(tokens, r"\bINV[- ]?\d+\b") or _find_by_regex(tokens, r"\bINV[- ]?\d+\b")
     date = _find_in_window(tokens, r"\b\d{4}[-/]\d{2}[-/]\d{2}\b") or _find_by_regex(tokens, r"\b\d{4}[-/]\d{2}[-/]\d{2}\b")
 
     vendor_id = manifest.get("vendor_id") or "UNKNOWN_VENDOR_ID"
     vendor_name = manifest.get("vendor_name") or "UNKNOWN_VENDOR"
-
+    vendor_vat = manifest.get("vendor_vat") or "UNKNOWN_VENDOR_VAT"
     currency = manifest.get("expected_currency") or _find_currency(tokens) or "UNK"
+
+    line_items, line_conf = _extract_line_items(tokens, page_number)
+
+    calculated_from_lines = sum(
+        item.get("line_total", item.get("quantity", 0) * item.get("unit_price", 0))
+        for item in line_items
+    )
+
+    chosen_total = 0.0
+    total_confidence = 0.0
+    total_evidence = {"page": page_number, "bbox": [0, 0, 0, 0], "source": "ocr"}
+
+    if total:
+        extracted_total = float(total["value"])
+
+        if calculated_from_lines > 0 and extracted_total < calculated_from_lines:
+            chosen_total = float(calculated_from_lines)
+            total_confidence = 0.85
+            total_evidence = {"page": page_number, "bbox": [0, 0, 0, 0], "source": "ocr"}
+        else:
+            chosen_total = extracted_total
+            total_confidence = float(total["confidence"])
+            total_evidence = total["evidence"]
+    else:
+        chosen_total = float(calculated_from_lines)
+        total_confidence = 0.85 if calculated_from_lines > 0 else 0.0
+        total_evidence = {"page": page_number, "bbox": [0, 0, 0, 0], "source": "ocr"}
 
     header = {
         "invoice_number": inv["value"] if inv else "UNKNOWN",
         "invoice_date": date["value"].replace("/", "-") if date else "UNKNOWN",
         "vendor_id": vendor_id,
         "vendor_name": vendor_name,
+        "vendor_vat": vendor_vat,
         "currency": currency,
-        "total_amount": total["value"] if total else 0.0,
+        "total_amount": chosen_total,
     }
 
     evidence: Dict[str, Any] = {}
     field_conf: Dict[str, float] = {}
 
-    def _set(field: str, obj: Optional[Dict[str, Any]]):
+    def _set(field: str, obj: Optional[Dict[str, Any]]) -> None:
         if not obj:
             field_conf[field] = 0.0
             return
@@ -120,11 +153,9 @@ def _extract_from_page(page: Dict[str, Any], manifest: Dict[str, Any]) -> Dict[s
 
     _set("invoice_number", inv)
     _set("invoice_date", date)
-    _set("total_amount", total)
 
-    if not total:
-        evidence["total_amount"] = {"page": page_number, "bbox": [0, 0, 0, 0], "source": "ocr"}
-        field_conf["total_amount"] = 0.0
+    evidence["total_amount"] = total_evidence
+    field_conf["total_amount"] = total_confidence
 
     for key in ("invoice_number", "invoice_date"):
         if header.get(key) == "UNKNOWN":
@@ -132,13 +163,13 @@ def _extract_from_page(page: Dict[str, Any], manifest: Dict[str, Any]) -> Dict[s
 
     field_conf["vendor_id"] = 1.0 if vendor_id != "UNKNOWN_VENDOR_ID" else 0.6
     field_conf["vendor_name"] = 1.0 if vendor_name != "UNKNOWN_VENDOR" else 0.6
+    field_conf["vendor_vat"] = 1.0 if vendor_vat != "UNKNOWN_VENDOR_VAT" else 0.6
     field_conf["currency"] = 1.0 if currency not in ("UNK", "", None) else 0.6
 
     evidence["vendor_id"] = {"page": page_number, "bbox": [0, 0, 0, 0], "source": "manifest"}
     evidence["vendor_name"] = {"page": page_number, "bbox": [0, 0, 0, 0], "source": "manifest"}
+    evidence["vendor_vat"] = {"page": page_number, "bbox": [0, 0, 0, 0], "source": "manifest"}
     evidence["currency"] = {"page": page_number, "bbox": [0, 0, 0, 0], "source": "manifest"}
-
-    line_items, line_conf = _extract_line_items(tokens, page_number)
 
     return {
         "page_number": page_number,
@@ -151,6 +182,7 @@ def _extract_from_page(page: Dict[str, Any], manifest: Dict[str, Any]) -> Dict[s
         }
     }
 
+
 def _extract_pdf_text_words(pdf_path: str) -> List[Dict[str, Any]]:
     pages = []
     with pdfplumber.open(pdf_path) as pdf:
@@ -161,16 +193,22 @@ def _extract_pdf_text_words(pdf_path: str) -> List[Dict[str, Any]]:
                 norm_words.append({
                     "text": w.get("text", ""),
                     "bbox": [w.get("x0"), w.get("top"), w.get("x1"), w.get("bottom")],
-                    "conf": 95,  
+                    "conf": 95,
                     "page": i,
                     "source": "pdf_text"
                 })
-            pages.append({"page_number": i, "tokens": norm_words, "source": "pdf_text"})
+            pages.append({
+                "page_number": i,
+                "tokens": norm_words,
+                "source": "pdf_text"
+            })
     return pages
+
 
 def _text_sufficient(pages: List[Dict[str, Any]], min_words: int = 30) -> bool:
     total_words = sum(len(p.get("tokens", [])) for p in pages)
     return total_words >= min_words
+
 
 def _ocr_pdf_pages(pdf_path: str, dpi: int = 200) -> List[Dict[str, Any]]:
     doc = fitz.open(pdf_path)
@@ -179,35 +217,47 @@ def _ocr_pdf_pages(pdf_path: str, dpi: int = 200) -> List[Dict[str, Any]]:
         page = doc[idx]
         pix = page.get_pixmap(dpi=dpi)
         img = Image.open(io.BytesIO(pix.tobytes("png")))
-        pages.append(_ocr_pil_image(img, page_number=idx+1))
+        pages.append(_ocr_pil_image(img, page_number=idx + 1))
     return pages
+
 
 def _ocr_pil_image(img: Image.Image, page_number: int) -> Dict[str, Any]:
     data = pytesseract.image_to_data(img, output_type=Output.DICT)
     tokens = []
+
     n = len(data["text"])
     for i in range(n):
         text = (data["text"][i] or "").strip()
         if not text:
             continue
+
         try:
             conf = float(data["conf"][i])
-        except:
+        except Exception:
             conf = 0.0
+
         if conf < 0:
             continue
+
         left = int(data["left"][i])
         top = int(data["top"][i])
         width = int(data["width"][i])
         height = int(data["height"][i])
+
         tokens.append({
             "text": text,
-            "bbox": [left, top, left+width, top+height],
+            "bbox": [left, top, left + width, top + height],
             "conf": conf,
             "page": page_number,
             "source": "ocr"
         })
-    return {"page_number": page_number, "tokens": tokens, "source": "ocr"}
+
+    return {
+        "page_number": page_number,
+        "tokens": tokens,
+        "source": "ocr"
+    }
+
 
 def _ocr_image(image_path: str, page_number: int = 1) -> Dict[str, Any]:
     img = Image.open(image_path)
@@ -249,6 +299,7 @@ def _aggregate_pages(pages: List[Dict[str, Any]]) -> Dict[str, Any]:
         }
     }
 
+
 def _find_by_regex(tokens: List[Dict[str, Any]], pattern: str) -> Optional[Dict[str, Any]]:
     rx = re.compile(pattern, re.IGNORECASE)
     for t in tokens:
@@ -257,9 +308,14 @@ def _find_by_regex(tokens: List[Dict[str, Any]], pattern: str) -> Optional[Dict[
             return {
                 "value": t["text"],
                 "confidence": conf,
-                "evidence": {"page": t["page"], "bbox": t["bbox"], "source": t["source"]}
+                "evidence": {
+                    "page": t["page"],
+                    "bbox": t["bbox"],
+                    "source": t["source"]
+                }
             }
     return None
+
 
 def _find_currency(tokens: List[Dict[str, Any]]) -> Optional[str]:
     hit = _find_by_regex(tokens, r"\b(EUR|USD|GBP|CHF)\b")
@@ -267,27 +323,31 @@ def _find_currency(tokens: List[Dict[str, Any]]) -> Optional[str]:
 
 
 def _find_total_amount(tokens: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    for i, t in enumerate(tokens):
-        if re.search(r"\btotal\b", t["text"], re.IGNORECASE):
-            window = tokens[i:i+8]
-            amt = _find_amount_in_tokens(window)
-            if amt:
-                return amt
+    priority_patterns = [
+        r"\bgrand\s+total\b",
+        r"\btotal\s+due\b",
+        r"\bamount\s+due\b",
+        r"\binvoice\s+total\b",
+        r"\bbalance\s+due\b",
+        r"\btotal\b"
+    ]
 
-    best = None
-    for t in tokens:
-        amt = _parse_amount(t["text"])
-        if amt is None:
-            continue
-        conf = max(0.0, min(1.0, (t["conf"] / 100.0)))
-        cand = {
-            "value": float(amt),
-            "confidence": conf,
-            "evidence": {"page": t["page"], "bbox": t["bbox"], "source": t["source"]}
-        }
-        if best is None or cand["confidence"] > best["confidence"]:
-            best = cand
-    return best
+    for pattern in priority_patterns:
+        for i in range(len(tokens)):
+            label_window = tokens[i:i + 6]
+            joined = " ".join(t["text"] for t in label_window)
+
+            if re.search(pattern, joined, re.IGNORECASE):
+                amount_window = tokens[i:i + 12]
+                amounts = _find_all_amounts_in_tokens(amount_window)
+                if amounts:
+                    return max(amounts, key=lambda x: x["value"])
+
+    all_amounts = _find_all_amounts_in_tokens(tokens)
+    if all_amounts:
+        return max(all_amounts, key=lambda x: x["value"])
+
+    return None
 
 
 def _find_amount_in_tokens(tokens: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -295,21 +355,49 @@ def _find_amount_in_tokens(tokens: List[Dict[str, Any]]) -> Optional[Dict[str, A
         amt = _parse_amount(t["text"])
         if amt is None:
             continue
+
         conf = max(0.0, min(1.0, (t["conf"] / 100.0)))
         return {
             "value": float(amt),
             "confidence": conf,
-            "evidence": {"page": t["page"], "bbox": t["bbox"], "source": t["source"]}
+            "evidence": {
+                "page": t["page"],
+                "bbox": t["bbox"],
+                "source": t["source"]
+            }
         }
     return None
 
+
+def _find_all_amounts_in_tokens(tokens: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    amounts = []
+    for t in tokens:
+        amt = _parse_amount(t["text"])
+        if amt is None:
+            continue
+
+        conf = max(0.0, min(1.0, (t["conf"] / 100.0)))
+        amounts.append({
+            "value": float(amt),
+            "confidence": conf,
+            "evidence": {
+                "page": t["page"],
+                "bbox": t["bbox"],
+                "source": t["source"]
+            }
+        })
+    return amounts
+
+
 def _find_in_window(tokens: List[Dict[str, Any]], pattern: str, window_size: int = 6) -> Optional[Dict[str, Any]]:
     rx = re.compile(pattern, re.IGNORECASE)
+
     for i in range(len(tokens)):
-        window = tokens[i:i+window_size]
+        window = tokens[i:i + window_size]
         window = [t for t in window if isinstance(t.get("bbox"), list) and len(t["bbox"]) == 4]
         if not window:
             continue
+
         joined = " ".join(t["text"] for t in window)
         m = rx.search(joined)
         if not m:
@@ -327,15 +415,22 @@ def _find_in_window(tokens: List[Dict[str, Any]], pattern: str, window_size: int
         return {
             "value": m.group(0),
             "confidence": conf,
-            "evidence": {"page": window[0]["page"], "bbox": [x0, y0, x1, y1], "source": window[0]["source"]},
+            "evidence": {
+                "page": window[0]["page"],
+                "bbox": [x0, y0, x1, y1],
+                "source": window[0]["source"]
+            },
         }
     return None
+
 
 def _parse_amount(text: str) -> Optional[float]:
     s = text.strip()
     s = s.replace("€", "").replace("$", "").replace("£", "").replace(" ", "")
+
     if not re.match(r"^\d{1,3}(,\d{3})*(\.\d{2})$|^\d+(\.\d{2})$", s):
         return None
+
     try:
         return float(s.replace(",", ""))
     except Exception:
@@ -348,14 +443,23 @@ def _extract_line_items(tokens: List[Dict[str, Any]], page_number: int):
     line_no = 1
 
     i = 0
-    while i < len(tokens) - 3:
+    while i < len(tokens) - 2:
         qty = _try_float(tokens[i]["text"])
-        unit = _parse_amount(tokens[i+1]["text"])
-        total = _parse_amount(tokens[i+2]["text"])
+        unit = _parse_amount(tokens[i + 1]["text"])
+        total = _parse_amount(tokens[i + 2]["text"])
 
         if qty is not None and unit is not None and total is not None:
-            desc_tokens = tokens[max(0, i-5):i]
-            desc = " ".join(t["text"] for t in desc_tokens).strip() or "Item"
+            desc_tokens = []
+            j = i - 1
+
+            while j >= 0 and len(desc_tokens) < 5:
+                prev_text = tokens[j]["text"]
+                if _try_float(prev_text) is not None or _parse_amount(prev_text) is not None:
+                    break
+                desc_tokens.insert(0, prev_text)
+                j -= 1
+
+            desc = " ".join(desc_tokens).strip() or "Item"
 
             line_items.append({
                 "line_number": line_no,
@@ -366,10 +470,14 @@ def _extract_line_items(tokens: List[Dict[str, Any]], page_number: int):
                 "page": page_number
             })
 
-            confs = [tokens[i]["conf"], tokens[i+1]["conf"], tokens[i+2]["conf"]]
+            confs = [tokens[i]["conf"], tokens[i + 1]["conf"], tokens[i + 2]["conf"]]
             c = sum(max(0.0, float(x)) for x in confs) / (len(confs) * 100.0)
             c = max(0.0, min(1.0, c))
-            line_conf.append({"line_number": line_no, "confidence": c})
+
+            line_conf.append({
+                "line_number": line_no,
+                "confidence": c
+            })
 
             line_no += 1
             i += 3
@@ -387,17 +495,34 @@ def _try_float(text: str) -> Optional[float]:
     except Exception:
         return None
 
+
 def _compute_confidence(aggregated: Dict[str, Any]) -> Dict[str, Any]:
     fields = dict(aggregated.get("best_field_conf", {}))
 
-    required = ["invoice_number", "invoice_date", "vendor_id", "vendor_name", "currency", "total_amount"]
+    required = [
+        "invoice_number",
+        "invoice_date",
+        "vendor_id",
+        "vendor_name",
+        "vendor_vat",
+        "currency",
+        "total_amount"
+    ]
+
     for k in required:
         fields.setdefault(k, 0.0)
 
     line_items = aggregated.get("line_items", [])
-    line_conf = [{"line_number": li.get("line_number", i+1), "confidence": 0.80} for i, li in enumerate(line_items)]
+    line_conf = [
+        {"line_number": li.get("line_number", i + 1), "confidence": 0.80}
+        for i, li in enumerate(line_items)
+    ]
 
-    return {"fields": fields, "line_items": line_conf}
+    return {
+        "fields": fields,
+        "line_items": line_conf
+    }
+
 
 def _detect_low_confidence(conf_block: Dict[str, Any]) -> List[str]:
     return [
@@ -405,6 +530,7 @@ def _detect_low_confidence(conf_block: Dict[str, Any]) -> List[str]:
         for field, score in conf_block["fields"].items()
         if score < LOW_CONFIDENCE_THRESHOLD
     ]
+
 
 def _export_csv(run_path: str, line_items: List[Dict[str, Any]]) -> None:
     csv_path = os.path.join(run_path, "line_items.csv")

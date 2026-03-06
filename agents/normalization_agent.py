@@ -11,25 +11,26 @@ def run_normalization(run_path, extracted_data):
     line_items = extracted_data.get("line_items", [])
 
     calculated_total = sum(
-        item["quantity"] * item["unit_price"]
+        item.get("line_total", item.get("quantity", 0) * item.get("unit_price", 0))
         for item in line_items
     )
 
-    declared_total = header.get("total_amount" , 0)
+    declared_total = header.get("total_amount", 0)
 
     if round(calculated_total, 2) != round(declared_total, 2):
         errors.append("Header total does not match sum of line items")
 
     normalized_output = {
-        "normalized": True,
+        "normalized": len(errors) == 0,
         "calculated_total": calculated_total,
+        "declared_total": declared_total,
         "errors": errors
     }
 
     output_path = os.path.join(run_path, "normalization.json")
-    
+
     with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(normalized_output,f , indent=2)
+        json.dump(normalized_output, f, indent=2)
 
     log_step(run_path, "Normalization completed")
 

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Manifest",
   "description": "Schema for invoice bundle manifest input",
   "type": "object",
@@ -15,7 +15,17 @@
       "minLength": 1,
       "maxLength": 100
     },
+    "vendor_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
     "po_number": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "vendor_vat": {
       "type": "string",
       "minLength": 1,
       "maxLength": 50
