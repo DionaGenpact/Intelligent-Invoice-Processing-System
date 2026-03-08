@@ -2,17 +2,19 @@ import os
 import json
 import re
 from typing import Dict, Any, List, Optional
-from fuzzywuzzy import fuzz, process
+from fuzzywuzzy import fuzz
 from utils.audit_logger import log_step
 from utils.schema_validator import validate_json
 
 FUZZY_THRESHOLD = 85
+
 
 def run_vendor_resolution(bundle_path: str, run_path: str, context: Dict[str, Any]) -> Dict[str, Any]:
     log_step(run_path, "Agent C (Vendor Resolution) started")
 
     vendor_master = _load_vendor_master(bundle_path)
     vendors: List[Dict[str, Any]] = vendor_master.get("vendors", [])
+
     if not isinstance(vendors, list):
         raise ValueError("vendor_master.json invalid: 'vendors' must be a list")
 
@@ -30,12 +32,13 @@ def run_vendor_resolution(bundle_path: str, run_path: str, context: Dict[str, An
     match_score: Optional[float] = None
     matched_vendor: Optional[Dict[str, Any]] = None
 
+   
     if invoice_vendor_id:
         matched_vendor = _find_by_id(vendors, invoice_vendor_id)
         if matched_vendor:
             resolved = True
             match_method = "vendor_id"
-            match_score = None  
+            match_score = None
 
             master_name = str(matched_vendor.get("vendor_name") or "").strip()
             if invoice_vendor_name and master_name:
@@ -45,20 +48,23 @@ def run_vendor_resolution(bundle_path: str, run_path: str, context: Dict[str, An
             else:
                 if not invoice_vendor_name:
                     flags.append("VENDOR_NAME_MISSING")
-                elif master_name and fuzz.token_set_ratio(invoice_vendor_name, master_name) < FUZZY_THRESHOLD:
-                    flags.append("VENDOR_NAME_MISMATCH")
 
+   
     if not matched_vendor:
         if invoice_vendor_name:
-            matched_vendor = _find_by_name_fuzzy(...)
+            matched_vendor = _find_by_name_fuzzy(vendors, invoice_vendor_name)
+
         if matched_vendor:
             resolved = True
             match_method = "vendor_name_fuzzy"
             match_score = float(matched_vendor.get("_match_score", 0))
         else:
-            flags.append("VENDOR_NAME_MISSING")
+            if not invoice_vendor_name:
+                flags.append("VENDOR_NAME_MISSING")
+
             if not invoice_vendor_id:
                 flags.append("NEW_VENDOR")
+
 
     if matched_vendor:
         master_bank = str(matched_vendor.get("bank_account") or "").strip()
@@ -100,7 +106,9 @@ def run_vendor_resolution(bundle_path: str, run_path: str, context: Dict[str, An
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2)
 
-    schema_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "schemas", "vendor_resolution.schema.json"))
+    schema_path = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "schemas", "vendor_resolution.schema.json")
+    )
     errors = validate_json(result, schema_path)
     if errors:
         log_step(run_path, f"Vendor resolution schema validation failed: {errors}")
@@ -137,7 +145,7 @@ def run_vendor_resolution(bundle_path: str, run_path: str, context: Dict[str, An
 def _find_by_id(vendors: List[Dict[str, Any]], vendor_id: str) -> Optional[Dict[str, Any]]:
     vid = vendor_id.strip().lower()
     for v in vendors:
-        if str(v.get("vendor_id", "")).strip().lower() == vid:
+        if isinstance(v, dict) and str(v.get("vendor_id", "")).strip().lower() == vid:
             return v
     return None
 
@@ -149,10 +157,15 @@ def _find_by_name_fuzzy(vendors: List[Dict[str, Any]], name: str, threshold: int
 
     best = None
     best_score = -1
+
     for v in vendors:
+        if not isinstance(v, dict):
+            continue
+
         vn = str(v.get("vendor_name", "")).strip()
         if not vn:
             continue
+
         score = fuzz.token_set_ratio(name, vn)
         if score > best_score:
             best_score = score
@@ -162,6 +175,7 @@ def _find_by_name_fuzzy(vendors: List[Dict[str, Any]], name: str, threshold: int
         best = dict(best)
         best["_match_score"] = best_score
         return best
+
     return None
 
 
@@ -173,5 +187,6 @@ def _load_vendor_master(bundle_path: str) -> Dict[str, Any]:
     path = os.path.join(bundle_path, "vendor_master.json")
     if not os.path.exists(path):
         raise FileNotFoundError(f"vendor_master.json not found in bundle: {path}")
+
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
