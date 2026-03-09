@@ -1,5 +1,5 @@
 # Intelligent Invoice Processing System (IIPS)
-
+![alt text](image.png)
 ## Current review status
 
 This repository now includes an end-to-end deterministic prototype for the capstone flow:
@@ -18,6 +18,17 @@ This repository now includes an end-to-end deterministic prototype for the capst
 - Deterministic re-runs into `runs/run_<bundle_name>/`
 
 ## How to run
+## Installation
+
+1. Install Python 3.8+
+2. Install Tesseract OCR:
+   - Windows: Download from https://github.com/UB-Mannheim/tesseract/wiki
+   - Mac: brew install tesseract
+   - Linux: sudo apt-get install tesseract-ocr
+3. Install Python dependencies:
+   pip install -r requirements.txt
+4. Run the demo:
+   streamlit run streamlit_app.py
 
 ```bash
 python main.py --bundle bundles/bundle_01

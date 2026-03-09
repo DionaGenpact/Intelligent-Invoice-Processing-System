@@ -1,0 +1,6 @@
+invoice_file: test_invoice_format.png
+vendor_id: UPLOADED_VENDOR
+vendor_name: Uploaded Vendor
+vendor_vat: UNKNOWN_VENDOR_VAT
+po_number: NON_PO
+expected_currency: USD
