@@ -1,0 +1,26 @@
+{
+    "po_number": "PO-1001",
+    "vendor_id": "VENDOR_001",
+    "currency": "EUR",
+    "total_amount": 160.0,
+    "line_items": [
+      {
+        "description": "Laptop Stand",
+        "quantity": 2,
+        "unit_price": 50.0,
+        "line_total": 100.0
+      },
+      {
+        "description": "Wireless Mouse",
+        "quantity": 1,
+        "unit_price": 25.0,
+        "line_total": 25.0
+      },
+      {
+        "description": "Keyboard",
+        "quantity": 1,
+        "unit_price": 35.0,
+        "line_total": 35.0
+      }
+    ]
+  }
