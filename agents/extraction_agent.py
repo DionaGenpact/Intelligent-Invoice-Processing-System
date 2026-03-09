@@ -14,7 +14,6 @@ import fitz
 from PIL import Image
 import io
 
-pytesseract.pytesseract.tesseract_cmd = r"C:\Users\602000885\tesseract.exe"
 
 LOW_CONFIDENCE_THRESHOLD = 0.75
 

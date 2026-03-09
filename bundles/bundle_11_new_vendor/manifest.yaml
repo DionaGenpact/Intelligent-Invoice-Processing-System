@@ -1,0 +1,6 @@
+invoice_file: invoice.pdf
+vendor_id: VENDOR_999
+vendor_name: New Supplier Ltd
+vendor_vat: GB999888777
+po_number: PO-6001
+expected_currency: GBP

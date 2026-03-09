@@ -1,0 +1,14 @@
+{
+  "po_number": "PO-4001",
+  "vendor_id": "VENDOR_001",
+  "currency": "EUR",
+  "total_amount": 1000.0,
+  "line_items": [
+    {
+      "description": "Printer",
+      "quantity": 5,
+      "unit_price": 200.0,
+      "line_total": 1000.0
+    }
+  ]
+}

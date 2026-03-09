@@ -9,90 +9,77 @@ import yaml
 from utils.audit_logger import log_step
 
 
+
 def run_exception_triage(bundle_path: str, run_path: str, context: Dict[str, Any]) -> Dict[str, Any]:
     log_step(run_path, "Exception Triage (H) started")
 
-    validation = context.get("validation_result") or _load_json(os.path.join(run_path, "validation.json")) or {}
-    match_result = context.get("match_result") or _load_json(os.path.join(run_path, "match_result.json")) or {}
-    compliance = context.get("compliance_risk_result") or _load_json(os.path.join(run_path, "compliance_risk.json")) or {}
-    anomaly = context.get("anomaly_result") or _load_json(os.path.join(run_path, "anomaly_result.json")) or {}
-
+    compliance = _load_json(os.path.join(run_path, "compliance_findings.json")) or context.get("compliance_risk_result") or {}
+    anomaly = _load_json(os.path.join(run_path, "anomaly_findings.json")) or context.get("anomaly_result") or {}
+    matching = _load_json(os.path.join(run_path, "match_result.json")) or context.get("match_result") or {}
+    validation = _load_json(os.path.join(run_path, "validation.json")) or context.get("validation_result") or {}
+    invoice_validation = _load_json(os.path.join(run_path, "invoice_validation.json")) or context.get("invoice_validation_result") or {}
     approval_policy = _load_yaml("policies/approval_policy.yaml") or {}
-    thresholds = approval_policy.get("approval_thresholds") or {}
-    routing_rules = approval_policy.get("routing_rules") or {}
-    auto_post = approval_policy.get("auto_post_conditions") or {}
+
+    routing_rules = approval_policy.get("routing_rules", {})
+    auto_post = approval_policy.get("auto_post_conditions", {})
 
     exceptions: List[Dict[str, Any]] = []
-    evidence: Dict[str, Any] = {
-        "validation": validation,
-        "match_result": match_result,
-        "compliance": compliance,
-        "anomaly": anomaly,
-    }
 
-    # Compliance findings -> exceptions
-    for f in (compliance.get("findings") or []):
-        if not isinstance(f, dict):
-            continue
-        exceptions.append({
-            "category": "COMPLIANCE",
-            "source": "compliance",
-            "code": f.get("code"),
-            "severity": str(f.get("severity", "MEDIUM")).upper(),
-            "message": f.get("message"),
-            "field": f.get("field"),
-            "recommendation": f.get("recommendation"),
-            "evidence": f.get("evidence"),
-        })
+    for item in compliance.get("findings", []) or []:
+        if isinstance(item, dict):
+            exceptions.append(_normalize_exception("COMPLIANCE", "compliance", item))
 
-    # Anomaly findings -> exceptions
-    for f in (anomaly.get("findings") or []):
-        if not isinstance(f, dict):
-            continue
-        exceptions.append({
-            "category": "RISK",
-            "source": "anomaly",
-            "code": f.get("code"),
-            "severity": str(f.get("severity", "MEDIUM")).upper(),
-            "message": f.get("message"),
-            "recommendation": f.get("recommendation"),
-            "evidence": f.get("evidence"),
-        })
+    for item in anomaly.get("findings", []) or []:
+        if isinstance(item, dict):
+            exceptions.append(_normalize_exception("ANOMALY", "anomaly", item))
 
-    # Matching failures -> exceptions
-    for chk in (match_result.get("checks") or []):
-        if isinstance(chk, dict) and chk.get("ok") is False:
+    for check in matching.get("checks", []) or []:
+        if isinstance(check, dict) and check.get("ok") is False:
             exceptions.append({
                 "category": "MATCHING",
                 "source": "matching",
-                "code": chk.get("check"),
+                "code": check.get("check", "MATCH_CHECK_FAILED"),
                 "severity": "MEDIUM",
-                "message": chk.get("reason") or "Matching check failed",
-                "recommendation": "Review PO/GRN matching and tolerances.",
-                "evidence": chk,
+                "message": check.get("reason") or "Matching totals check failed.",
+                "recommendation": "Review PO/GRN references and tolerance rules.",
+                "evidence": check,
             })
 
-    # Validation issues -> exceptions
-    for v in (validation.get("issues") or []):
-        if isinstance(v, dict):
+    for check in matching.get("line_item_checks", []) or []:
+        if isinstance(check, dict) and check.get("ok") is False:
             exceptions.append({
-                "category": "VALIDATION",
-                "source": "validation",
-                "code": v.get("code", "VALIDATION_ISSUE"),
-                "severity": str(v.get("severity", "MEDIUM")).upper(),
-                "message": v.get("message", "Validation issue detected."),
-                "recommendation": v.get("recommendation", "Fix validation issue or route for review."),
-                "evidence": v,
+                "category": "MATCHING",
+                "source": "matching",
+                "code": check.get("check") or f"LINE_{check.get('line', 'UNKNOWN')}_MISMATCH",
+                "severity": "MEDIUM",
+                "message": check.get("reason") or "Line item matching check failed.",
+                "recommendation": "Review PO/GRN line alignment and tolerances.",
+                "evidence": check,
             })
 
-    decision, route_to, follow_up = _decide(
-        exceptions=exceptions,
-        evidence=evidence,
-        thresholds=thresholds,
-        routing_rules=routing_rules,
-        auto_post=auto_post,
-    )
+    for error in validation.get("errors", []) or []:
+        exceptions.append({
+            "category": "VALIDATION",
+            "source": "validation",
+            "code": "BUNDLE_VALIDATION_ERROR",
+            "severity": "HIGH",
+            "message": error,
+            "recommendation": "Correct bundle structure before reprocessing.",
+            "evidence": {"error": error},
+        })
 
+    for error in invoice_validation.get("errors", []) or []:
+        exceptions.append({
+            "category": "VALIDATION",
+            "source": "invoice_validation",
+            "code": "INVOICE_VALIDATION_ERROR",
+            "severity": "HIGH",
+            "message": error,
+            "recommendation": "Fix invoice totals or mandatory invoice fields.",
+            "evidence": {"error": error},
+        })
+
+    decision, route_to, follow_up = _decide(exceptions, compliance, routing_rules, auto_post)
     packet = {
         "decision": decision,
         "route_to": route_to,
@@ -101,57 +88,64 @@ def run_exception_triage(bundle_path: str, run_path: str, context: Dict[str, Any
         "exceptions": exceptions,
         "evidence_files": [
             "validation.json",
+            "invoice_validation.json",
             "match_result.json",
-            "compliance_risk.json",
-            "anomaly_result.json",
+            "compliance_findings.json",
+            "anomaly_findings.json",
+            "audit_log.md",
         ],
     }
 
     _write_json(run_path, "approval_packet.json", packet)
     _write_md(run_path, "exceptions.md", _format_md(packet))
-
     log_step(run_path, f"Exception Triage (H) completed (decision={decision}, route={route_to})")
     return packet
 
 
+def _normalize_exception(category: str, source: str, item: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "category": category,
+        "source": source,
+        "code": item.get("code", f"{category}_ISSUE"),
+        "severity": str(item.get("severity", "MEDIUM")).upper(),
+        "message": item.get("message", f"{category.title()} issue detected."),
+        "recommendation": item.get("recommendation", "Review before posting."),
+        "evidence": item.get("evidence", {}),
+    }
+
+
 def _decide(
     exceptions: List[Dict[str, Any]],
-    evidence: Dict[str, Any],
-    thresholds: Dict[str, Any],
+    compliance: Dict[str, Any],
     routing_rules: Dict[str, Any],
     auto_post: Dict[str, Any],
 ) -> Tuple[str, Optional[str], List[str]]:
     severities = [str(e.get("severity", "")).upper() for e in exceptions]
     has_critical = "CRITICAL" in severities
     has_high = "HIGH" in severities
-    has_any = len(exceptions) > 0
-
-    compliance = evidence.get("compliance") or {}
-    risk_level = str(
-        compliance.get("risk_level", compliance.get("risk", ""))
-    ).upper()
+    has_any = bool(exceptions)
+    risk_level = str((compliance.get("risk") or {}).get("level", compliance.get("risk_level", "LOW"))).upper()
 
     follow_up: List[str] = []
-
     if has_critical:
-        follow_up.append("Investigate duplicate/fraud signals before posting.")
-        follow_up.append("Verify vendor identity and invoice references.")
-        return "BLOCK", "finance", follow_up
+        follow_up.extend([
+            "Investigate duplicate or fraud signals before posting.",
+            "Verify vendor identity and invoice references.",
+        ])
+        return "BLOCK", routing_rules.get("high_risk", "finance"), follow_up
 
     if has_high or risk_level == "HIGH":
-        follow_up.append("Verify compliance issues and supporting documents (PO/GRN/VAT).")
-        follow_up.append("Confirm bank details with vendor master / finance process.")
+        follow_up.extend([
+            "Verify compliance issues and supporting documents.",
+            "Confirm vendor/bank details with finance.",
+        ])
         return "ROUTE", routing_rules.get("high_risk", "finance"), follow_up
 
-    require_no_compliance = bool(auto_post.get("require_no_compliance_issues", True))
-
- 
-    if not has_any:
+    if not has_any and bool(auto_post.get("require_no_compliance_issues", True)):
         follow_up.append("All checks passed under policy; eligible for auto-post.")
         return "AUTO_POST", None, follow_up
 
-   
-    if has_any and require_no_compliance:
+    if has_any:
         follow_up.append("Resolve listed exceptions before posting.")
         return "ROUTE", routing_rules.get("default", "manager"), follow_up
 
@@ -160,52 +154,34 @@ def _decide(
 
 
 def _summary(exceptions: List[Dict[str, Any]]) -> Dict[str, Any]:
-    by_sev: Dict[str, int] = {}
-    by_cat: Dict[str, int] = {}
-
-    for e in exceptions:
-        sev = str(e.get("severity", "UNKNOWN")).upper()
-        cat = str(e.get("category", "UNCATEGORIZED")).upper()
-        by_sev[sev] = by_sev.get(sev, 0) + 1
-        by_cat[cat] = by_cat.get(cat, 0) + 1
-
-    return {
-        "total": len(exceptions),
-        "by_severity": by_sev,
-        "by_category": by_cat
-    }
+    by_severity: Dict[str, int] = {}
+    by_category: Dict[str, int] = {}
+    for exception in exceptions:
+        sev = str(exception.get("severity", "UNKNOWN")).upper()
+        cat = str(exception.get("category", "UNCATEGORIZED")).upper()
+        by_severity[sev] = by_severity.get(sev, 0) + 1
+        by_category[cat] = by_category.get(cat, 0) + 1
+    return {"total": len(exceptions), "by_severity": by_severity, "by_category": by_category}
 
 
 def _format_md(packet: Dict[str, Any]) -> str:
-    decision = packet.get("decision")
-    route_to = packet.get("route_to")
-    follow_up = packet.get("follow_up") or []
-    exceptions = packet.get("exceptions") or []
-
-    lines = []
-    lines.append("# Exceptions\n")
-    lines.append(f"**Decision:** {decision}\n")
-
-    if route_to:
-        lines.append(f"**Route to:** {route_to}\n")
-
-    if follow_up:
-        lines.append("## Follow-up\n")
-        for x in follow_up:
-            lines.append(f"- {x}")
-        lines.append("")
-
-    lines.append("## Findings\n")
+    lines = ["# Exceptions", "", f"**Decision:** {packet.get('decision')}", ""]
+    if packet.get("route_to"):
+        lines.extend([f"**Route to:** {packet.get('route_to')}", ""])
+    lines.extend(["## Follow-up", ""])
+    for item in packet.get("follow_up", []) or []:
+        lines.append(f"- {item}")
+    lines.extend(["", "## Findings", ""])
+    exceptions = packet.get("exceptions", []) or []
     if not exceptions:
-        lines.append("No exceptions detected.\n")
-        return "\n".join(lines)
-
-    for e in exceptions:
-        lines.append(f"- [{e.get('severity')}] {e.get('category')}::{e.get('code')}: {e.get('message')}")
-        rec = e.get("recommendation")
-        if rec:
-            lines.append(f"  - Recommendation: {rec}")
-
+        lines.append("No exceptions detected.")
+    else:
+        for exception in exceptions:
+            lines.append(
+                f"- [{exception.get('severity')}] {exception.get('category')}::{exception.get('code')}: {exception.get('message')}"
+            )
+            if exception.get("recommendation"):
+                lines.append(f"  - Recommendation: {exception.get('recommendation')}")
     return "\n".join(lines) + "\n"
 
 

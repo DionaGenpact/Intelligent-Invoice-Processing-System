@@ -1,0 +1,14 @@
+{
+  "po_number": "PO-6001",
+  "vendor_id": "VENDOR_999",
+  "currency": "GBP",
+  "total_amount": 500.0,
+  "line_items": [
+    {
+      "description": "Office Supplies",
+      "quantity": 1,
+      "unit_price": 500.0,
+      "line_total": 500.0
+    }
+  ]
+}

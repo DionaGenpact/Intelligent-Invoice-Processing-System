@@ -1,0 +1,14 @@
+{
+  "po_number": "PO-3001",
+  "vendor_id": "VENDOR_001",
+  "currency": "EUR",
+  "total_amount": 500.0,
+  "line_items": [
+    {
+      "description": "Monitor",
+      "quantity": 10,
+      "unit_price": 50.0,
+      "line_total": 500.0
+    }
+  ]
+}

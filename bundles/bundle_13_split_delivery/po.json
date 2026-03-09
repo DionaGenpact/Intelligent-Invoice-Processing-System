@@ -1,0 +1,14 @@
+{
+  "po_number": "PO-8001",
+  "vendor_id": "VENDOR_001",
+  "currency": "EUR",
+  "total_amount": 1000.0,
+  "line_items": [
+    {
+      "description": "Desk Chair",
+      "quantity": 20,
+      "unit_price": 50.0,
+      "line_total": 1000.0
+    }
+  ]
+}

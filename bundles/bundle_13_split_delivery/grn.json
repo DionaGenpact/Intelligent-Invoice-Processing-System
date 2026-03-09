@@ -1,0 +1,24 @@
+{
+  "grn_number": "GRN-8001-MULTI",
+  "po_number": "PO-8001",
+  "vendor_id": "VENDOR_001",
+  "receipt_date": "2026-03-12",
+  "currency": "EUR",
+  "total_amount": 1000.0,
+  "line_items": [
+    {
+      "description": "Desk Chair",
+      "quantity": 10,
+      "unit_price": 50.0,
+      "line_total": 500.0,
+      "delivery_note": "First delivery - 10 units"
+    },
+    {
+      "description": "Desk Chair",
+      "quantity": 10,
+      "unit_price": 50.0,
+      "line_total": 500.0,
+      "delivery_note": "Second delivery - 10 units"
+    }
+  ]
+}
