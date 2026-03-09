@@ -1,0 +1,15 @@
+{
+    "vendors": [
+      {
+        "vendor_id": "VENDOR_001",
+        "vendor_name": "Tech Supplies GmbH",
+        "bank_account": "DE12345678901234567890",
+        "vat_id": "DE123456789",
+        "is_high_risk": false
+      }
+    ],
+    "snapshot_meta": {
+      "as_of": "2026-03-09",
+      "source": "demo"
+    }
+  }
