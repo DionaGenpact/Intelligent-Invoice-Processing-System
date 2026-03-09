@@ -14,11 +14,13 @@ import fitz
 from PIL import Image
 import io
 
+from utils.ocr_config import configure_tesseract
 
 LOW_CONFIDENCE_THRESHOLD = 0.75
 
 
 def run_extraction(bundle_path: str, run_path: str, context: Dict[str, Any]) -> Dict[str, Any]:
+    configure_tesseract()
     log_step(run_path, "Extraction (Agent B) started")
 
     manifest = context.get("manifest", {})
