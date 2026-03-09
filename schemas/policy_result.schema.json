@@ -1,0 +1,21 @@
+{
+    "type": "object",
+    "properties": {
+      "jurisdiction": {
+        "type": ["string", "null"]
+      },
+      "required_fields": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "vat_rules": {
+        "type": "object"
+      },
+      "risk_score": {
+        "type": "number"
+      },
+      "risk_level": {
+        "type": "string"
+      }
+    }
+  }

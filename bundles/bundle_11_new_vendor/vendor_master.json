@@ -1,0 +1,18 @@
+{
+  "vendors": [
+    {
+      "vendor_id": "VENDOR_001",
+      "vendor_name": "Tech Supplies GmbH",
+      "vat_id": "DE123456789",
+      "bank_account": "DE89370400440532013000",
+      "is_high_risk": false
+    },
+    {
+      "vendor_id": "VENDOR_002",
+      "vendor_name": "Office Pro Inc",
+      "vat_id": "US123456789",
+      "bank_account": "US12345678901234567890",
+      "is_high_risk": false
+    }
+  ]
+}

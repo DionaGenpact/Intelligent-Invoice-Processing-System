@@ -1,0 +1,6 @@
+invoice_file: invoice.pdf
+vendor_id: VENDOR_001
+vendor_name: Tech Supplies GmbH
+vendor_vat: DE123456789
+po_number: PO-2001
+expected_currency: EUR

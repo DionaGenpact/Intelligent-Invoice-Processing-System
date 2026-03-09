@@ -9,3 +9,4 @@ pytesseract # also needs to be downloaded outside pip
 Pillow
 opencv-python
 pdf2image
+streamlit

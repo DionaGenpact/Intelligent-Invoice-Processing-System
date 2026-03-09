@@ -1,0 +1,14 @@
+{
+  "po_number": "PO-5001",
+  "vendor_id": "VENDOR_001",
+  "currency": "EUR",
+  "total_amount": 8000.0,
+  "line_items": [
+    {
+      "description": "Server Equipment",
+      "quantity": 2,
+      "unit_price": 4000.0,
+      "line_total": 8000.0
+    }
+  ]
+}

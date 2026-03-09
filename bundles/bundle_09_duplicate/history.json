@@ -1,0 +1,24 @@
+[
+  {
+    "invoice_number": "INV-1001",
+    "invoice_date": "2026-03-06",
+    "vendor_id": "VENDOR_001",
+    "vendor_name": "Tech Supplies GmbH",
+    "total_amount": 160.0,
+    "currency": "EUR",
+    "po_number": "PO-1001",
+    "processed_date": "2026-03-06",
+    "status": "POSTED"
+  },
+  {
+    "invoice_number": "INV-0999",
+    "invoice_date": "2026-03-01",
+    "vendor_id": "VENDOR_001",
+    "vendor_name": "Tech Supplies GmbH",
+    "total_amount": 500.0,
+    "currency": "EUR",
+    "po_number": "PO-0999",
+    "processed_date": "2026-03-02",
+    "status": "POSTED"
+  }
+]
