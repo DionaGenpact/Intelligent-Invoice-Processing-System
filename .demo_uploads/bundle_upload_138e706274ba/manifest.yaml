@@ -1,4 +1,4 @@
-invoice_file: invoice_bank_change.pdf
+invoice_file: test_low_confidence_vat.pdf
 vendor_id: UPLOADED_VENDOR
 vendor_name: Uploaded Vendor
 vendor_vat: UNKNOWN_VENDOR_VAT
