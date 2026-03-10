@@ -11,7 +11,7 @@ import pytesseract
 from pytesseract import Output
 import pdfplumber
 import fitz
-from PIL import Image
+from PIL import Image, ImageOps, ImageFilter
 import io
 
 from utils.ocr_config import configure_tesseract
@@ -40,7 +40,9 @@ def run_extraction(bundle_path: str, run_path: str, context: Dict[str, Any]) -> 
 
     low_conf_fields = _detect_low_confidence(confidence_block)
     if low_conf_fields:
-        context.setdefault("risk_flags", []).append("LOW_CONFIDENCE_FIELDS")
+        existing_flags = context.setdefault("risk_flags", [])
+        if "LOW_CONFIDENCE_FIELDS" not in existing_flags:
+            existing_flags.append("LOW_CONFIDENCE_FIELDS")
         context["low_confidence_fields"] = low_conf_fields
         log_step(run_path, f"Low confidence fields detected: {low_conf_fields}")
 
@@ -58,7 +60,9 @@ def run_extraction(bundle_path: str, run_path: str, context: Dict[str, Any]) -> 
     schema_errors = validate_json(extracted_data, schema_path)
     if schema_errors:
         log_step(run_path, f"Extraction schema validation failed: {schema_errors}")
-        context.setdefault("risk_flags", []).append("EXTRACTION_SCHEMA_INVALID")
+        existing_flags = context.setdefault("risk_flags", [])
+        if "EXTRACTION_SCHEMA_INVALID" not in existing_flags:
+            existing_flags.append("EXTRACTION_SCHEMA_INVALID")
         context["extraction_schema_errors"] = schema_errors
 
         with open(os.path.join(run_path, "context.json"), "w", encoding="utf-8") as f:
@@ -97,13 +101,42 @@ def _extract_from_page(page: Dict[str, Any], manifest: Dict[str, Any]) -> Dict[s
     page_number = page.get("page_number", 1)
 
     total = _find_total_amount(tokens)
-    inv = _find_in_window(tokens, r"\bINV[- ]?\d+\b") or _find_by_regex(tokens, r"\bINV[- ]?\d+\b")
-    date = _find_in_window(tokens, r"\b\d{4}[-/]\d{2}[-/]\d{2}\b") or _find_by_regex(tokens, r"\b\d{4}[-/]\d{2}[-/]\d{2}\b")
+
+    invoice_patterns = [
+        r"\bINV[- ]?\d+\b",
+        r"\bIMG[- ]?\d+\b",
+        r"\b[A-Z]{2,6}[- ]?\d{2,}\b",
+        r"\bINVOICE\s*(NO|NUMBER|#)?\s*[:\-]?\s*[A-Z0-9-]+\b",
+    ]
+    inv = None
+    for pattern in invoice_patterns:
+        inv = _find_in_window(tokens, pattern, window_size=8) or _find_by_regex(tokens, pattern)
+        if inv:
+            break
+
+    date_patterns = [
+        r"\b\d{4}[-/]\d{2}[-/]\d{2}\b",
+        r"\b\d{2}[-/]\d{2}[-/]\d{4}\b",
+        r"\b\d{2}\.\d{2}\.\d{4}\b",
+    ]
+    date = None
+    for pattern in date_patterns:
+        date = _find_in_window(tokens, pattern, window_size=8) or _find_by_regex(tokens, pattern)
+        if date:
+            break
+    
 
     vendor_id = manifest.get("vendor_id") or "UNKNOWN_VENDOR_ID"
-    vendor_name = manifest.get("vendor_name") or "UNKNOWN_VENDOR"
+
+    manifest_vendor_name = manifest.get("vendor_name")
+    if manifest_vendor_name and manifest_vendor_name != "Uploaded Vendor":
+        vendor_name = manifest_vendor_name
+    else:
+        vendor_name = _find_vendor_name(tokens) or "UNKNOWN_VENDOR"
+
     vendor_vat = manifest.get("vendor_vat") or "UNKNOWN_VENDOR_VAT"
     currency = manifest.get("expected_currency") or _find_currency(tokens) or "UNK"
+
 
     line_items, line_conf = _extract_line_items(tokens, page_number)
 
@@ -114,7 +147,7 @@ def _extract_from_page(page: Dict[str, Any], manifest: Dict[str, Any]) -> Dict[s
 
     chosen_total = 0.0
     total_confidence = 0.0
-    total_evidence = {"page": page_number, "bbox": [0, 0, 0, 0], "source": "ocr"}
+    total_evidence = {"page": page_number, "bbox": [0, 0, 0, 0], "source": page.get("source", "ocr")}
 
     if total:
         extracted_total = float(total["value"])
@@ -122,7 +155,7 @@ def _extract_from_page(page: Dict[str, Any], manifest: Dict[str, Any]) -> Dict[s
         if calculated_from_lines > 0 and extracted_total < calculated_from_lines:
             chosen_total = float(calculated_from_lines)
             total_confidence = 0.85
-            total_evidence = {"page": page_number, "bbox": [0, 0, 0, 0], "source": "ocr"}
+            total_evidence = {"page": page_number, "bbox": [0, 0, 0, 0], "source": page.get("source", "ocr")}
         else:
             chosen_total = extracted_total
             total_confidence = float(total["confidence"])
@@ -130,11 +163,19 @@ def _extract_from_page(page: Dict[str, Any], manifest: Dict[str, Any]) -> Dict[s
     else:
         chosen_total = float(calculated_from_lines)
         total_confidence = 0.85 if calculated_from_lines > 0 else 0.0
-        total_evidence = {"page": page_number, "bbox": [0, 0, 0, 0], "source": "ocr"}
+        total_evidence = {"page": page_number, "bbox": [0, 0, 0, 0], "source": page.get("source", "ocr")}
+
+    invoice_number_value = inv["value"] if inv else "UNKNOWN"
+    if invoice_number_value.upper().startswith("INVOICE"):
+        parts = re.split(r"[:\-]\s*", invoice_number_value, maxsplit=1)
+        if len(parts) == 2:
+            invoice_number_value = parts[1].strip()
+
+    invoice_date_value = date["value"].replace("/", "-").replace(".", "-") if date else "UNKNOWN"
 
     header = {
-        "invoice_number": inv["value"] if inv else "UNKNOWN",
-        "invoice_date": date["value"].replace("/", "-") if date else "UNKNOWN",
+        "invoice_number": invoice_number_value,
+        "invoice_date": invoice_date_value,
         "vendor_id": vendor_id,
         "vendor_name": vendor_name,
         "vendor_vat": vendor_vat,
@@ -222,8 +263,25 @@ def _ocr_pdf_pages(pdf_path: str, dpi: int = 200) -> List[Dict[str, Any]]:
     return pages
 
 
+def _preprocess_image_for_ocr(img: Image.Image) -> Image.Image:
+    img = img.convert("L")
+    width, height = img.size
+    img = img.resize((max(width * 2, width), max(height * 2, height)))
+    img = ImageOps.autocontrast(img)
+    img = img.filter(ImageFilter.SHARPEN)
+    img = img.point(lambda x: 0 if x < 180 else 255, mode="1")
+    return img
+
+
 def _ocr_pil_image(img: Image.Image, page_number: int) -> Dict[str, Any]:
-    data = pytesseract.image_to_data(img, output_type=Output.DICT)
+    processed = _preprocess_image_for_ocr(img)
+
+    data = pytesseract.image_to_data(
+        processed,
+        output_type=Output.DICT,
+        config=r"--oem 3 --psm 6"
+    )
+
     tokens = []
 
     n = len(data["text"])
@@ -304,10 +362,11 @@ def _aggregate_pages(pages: List[Dict[str, Any]]) -> Dict[str, Any]:
 def _find_by_regex(tokens: List[Dict[str, Any]], pattern: str) -> Optional[Dict[str, Any]]:
     rx = re.compile(pattern, re.IGNORECASE)
     for t in tokens:
-        if rx.search(t["text"]):
-            conf = max(0.0, min(1.0, (t["conf"] / 100.0)))
+        text = str(t.get("text", ""))
+        if rx.search(text):
+            conf = max(0.0, min(1.0, (float(t.get("conf", 0)) / 100.0)))
             return {
-                "value": t["text"],
+                "value": text,
                 "confidence": conf,
                 "evidence": {
                     "page": t["page"],
@@ -318,9 +377,62 @@ def _find_by_regex(tokens: List[Dict[str, Any]], pattern: str) -> Optional[Dict[
     return None
 
 
-def _find_currency(tokens: List[Dict[str, Any]]) -> Optional[str]:
-    hit = _find_by_regex(tokens, r"\b(EUR|USD|GBP|CHF)\b")
-    return hit["value"].upper() if hit else None
+def _find_vendor_name(tokens: List[Dict[str, Any]]) -> Optional[str]:
+
+    patterns = [
+        r"\bvendor[:\s]+([A-Za-z0-9&.,\- ]{3,})",
+        r"\bsupplier[:\s]+([A-Za-z0-9&.,\- ]{3,})",
+        r"\bfrom[:\s]+([A-Za-z0-9&.,\- ]{3,})",
+    ]
+
+    joined_text = " ".join(str(t.get("text", "")) for t in tokens)
+
+    for pattern in patterns:
+        m = re.search(pattern, joined_text, re.IGNORECASE)
+        if m:
+            value = m.group(1).strip()
+            value = re.split(r"\s{2,}", value)[0].strip()
+            if value and len(value) >= 3:
+                return value
+
+    rows = _group_tokens_into_rows(tokens, y_tolerance=12)
+
+    for row in rows[:6]:
+        row_text = " ".join(str(t.get("text", "")).strip() for t in row).strip()
+        row_lower = row_text.lower()
+
+        if not row_text:
+            continue
+
+        blocked = [
+            "invoice",
+            "invoice number",
+            "invoice no",
+            "date",
+            "total",
+            "amount due",
+            "grand total",
+            "subtotal",
+            "bill to",
+            "ship to"
+        ]
+
+        if any(b in row_lower for b in blocked):
+            continue
+
+        numeric_count = sum(
+            1 for t in row
+            if _parse_amount(str(t.get("text", ""))) is not None
+            or _try_float(str(t.get("text", ""))) is not None
+        )
+
+        if numeric_count > 1:
+            continue
+
+        if len(row_text) >= 4:
+            return row_text
+
+    return None
 
 
 def _find_total_amount(tokens: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -336,7 +448,7 @@ def _find_total_amount(tokens: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]
     for pattern in priority_patterns:
         for i in range(len(tokens)):
             label_window = tokens[i:i + 6]
-            joined = " ".join(t["text"] for t in label_window)
+            joined = " ".join(str(t.get("text", "")) for t in label_window)
 
             if re.search(pattern, joined, re.IGNORECASE):
                 amount_window = tokens[i:i + 12]
@@ -353,11 +465,11 @@ def _find_total_amount(tokens: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]
 
 def _find_amount_in_tokens(tokens: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     for t in tokens:
-        amt = _parse_amount(t["text"])
+        amt = _parse_amount(str(t.get("text", "")))
         if amt is None:
             continue
 
-        conf = max(0.0, min(1.0, (t["conf"] / 100.0)))
+        conf = max(0.0, min(1.0, (float(t.get("conf", 0)) / 100.0)))
         return {
             "value": float(amt),
             "confidence": conf,
@@ -373,11 +485,11 @@ def _find_amount_in_tokens(tokens: List[Dict[str, Any]]) -> Optional[Dict[str, A
 def _find_all_amounts_in_tokens(tokens: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     amounts = []
     for t in tokens:
-        amt = _parse_amount(t["text"])
+        amt = _parse_amount(str(t.get("text", "")))
         if amt is None:
             continue
 
-        conf = max(0.0, min(1.0, (t["conf"] / 100.0)))
+        conf = max(0.0, min(1.0, (float(t.get("conf", 0)) / 100.0)))
         amounts.append({
             "value": float(amt),
             "confidence": conf,
@@ -399,7 +511,7 @@ def _find_in_window(tokens: List[Dict[str, Any]], pattern: str, window_size: int
         if not window:
             continue
 
-        joined = " ".join(t["text"] for t in window)
+        joined = " ".join(str(t.get("text", "")) for t in window)
         m = rx.search(joined)
         if not m:
             continue
@@ -409,7 +521,7 @@ def _find_in_window(tokens: List[Dict[str, Any]], pattern: str, window_size: int
         x1 = max(t["bbox"][2] for t in window)
         y1 = max(t["bbox"][3] for t in window)
 
-        confs = [max(0.0, float(t["conf"])) for t in window]
+        confs = [max(0.0, float(t.get("conf", 0))) for t in window]
         conf = sum(confs) / (len(confs) * 100.0)
         conf = max(0.0, min(1.0, conf))
 
@@ -426,16 +538,277 @@ def _find_in_window(tokens: List[Dict[str, Any]], pattern: str, window_size: int
 
 
 def _parse_amount(text: str) -> Optional[float]:
-    s = text.strip()
-    s = s.replace("€", "").replace("$", "").replace("£", "").replace(" ", "")
-
-    if not re.match(r"^\d{1,3}(,\d{3})*(\.\d{2})$|^\d+(\.\d{2})$", s):
+    s = str(text).strip()
+    if not s:
         return None
+
+    s = s.replace("€", "").replace("$", "").replace("£", "").replace("CHF", "")
+    s = s.replace("EUR", "").replace("USD", "").replace("GBP", "")
+    s = s.replace(" ", "")
+
+    s = re.sub(r"[^0-9,.\-]", "", s)
+
+    if not s or s in {"-", ".", ","}:
+        return None
+
+    if "," in s and "." in s:
+        if s.rfind(",") > s.rfind("."):
+            s = s.replace(".", "")
+            s = s.replace(",", ".")
+        else:
+            s = s.replace(",", "")
+    elif "," in s:
+        parts = s.split(",")
+        if len(parts) == 2 and len(parts[1]) in (2, 3):
+            s = s.replace(",", ".")
+        else:
+            s = s.replace(",", "")
 
     try:
-        return float(s.replace(",", ""))
+        return float(s)
     except Exception:
         return None
+
+
+def _group_tokens_into_rows(tokens: List[Dict[str, Any]], y_tolerance: int = 12) -> List[List[Dict[str, Any]]]:
+    valid_tokens = [
+        t for t in tokens
+        if isinstance(t.get("bbox"), list) and len(t["bbox"]) == 4 and str(t.get("text", "")).strip()
+    ]
+
+    valid_tokens.sort(key=lambda t: (t["bbox"][1], t["bbox"][0]))
+    rows: List[List[Dict[str, Any]]] = []
+
+    for token in valid_tokens:
+        y_top = token["bbox"][1]
+        placed = False
+
+        for row in rows:
+            row_y = sum(t["bbox"][1] for t in row) / len(row)
+            if abs(y_top - row_y) <= y_tolerance:
+                row.append(token)
+                placed = True
+                break
+
+        if not placed:
+            rows.append([token])
+
+    for row in rows:
+        row.sort(key=lambda t: t["bbox"][0])
+
+    return rows
+
+
+def _is_header_like_row(row_text: str) -> bool:
+    text = row_text.lower()
+    header_keywords = [
+        "description", "qty", "quantity", "unit", "unit price", "price",
+        "amount", "total", "item", "product", "code", "vat", "tax"
+    ]
+    hits = sum(1 for kw in header_keywords if kw in text)
+    return hits >= 2
+
+
+def _is_noise_row(row_tokens: List[Dict[str, Any]], row_text: str) -> bool:
+    text = row_text.strip().lower()
+    if not text:
+        return True
+
+    noise_patterns = [
+        "invoice", "invoice number", "invoice no", "bill to", "ship to",
+        "subtotal", "grand total", "total due", "amount due", "balance due",
+        "bank", "iban", "swift", "tax id", "page"
+    ]
+
+    if any(p in text for p in noise_patterns):
+        numeric_count = sum(
+            1 for t in row_tokens
+            if _parse_amount(str(t.get("text", ""))) is not None or _try_float(str(t.get("text", ""))) is not None
+        )
+        if numeric_count < 2:
+            return True
+
+    useful_tokens = [t for t in row_tokens if str(t.get("text", "")).strip()]
+    if len(useful_tokens) < 2:
+        return True
+
+    return False
+
+
+def _clean_description_tokens(tokens: List[Dict[str, Any]]) -> str:
+    parts = []
+
+    for idx, t in enumerate(tokens):
+        txt = str(t.get("text", "")).strip()
+        if not txt:
+            continue
+
+        if idx == 0 and txt.isdigit():
+            continue
+
+        if _parse_amount(txt) is not None:
+            continue
+
+        if _try_float(txt) is not None:
+            continue
+
+        if txt.lower() == "x":
+            continue
+
+        parts.append(txt)
+
+    return " ".join(parts).strip()
+
+
+def _extract_line_from_row(row_tokens: List[Dict[str, Any]], page_number: int, line_no: int) -> Optional[Dict[str, Any]]:
+    row_text = " ".join(str(t.get("text", "")).strip() for t in row_tokens).strip()
+
+    if not row_text:
+        return None
+
+    if _is_header_like_row(row_text):
+        return None
+
+    if _is_noise_row(row_tokens, row_text):
+        return None
+
+    normalized_row = re.sub(r"\s+", " ", row_text).strip()
+
+    pattern_with_row_no = re.match(
+        r"^\s*(\d+)\s+(.+?)\s+(\d+(?:\.\d+)?)\s*[xX]\s*(\d+(?:[.,]\d+)?)\s*$",
+        normalized_row
+    )
+    if pattern_with_row_no:
+        _, description_text, qty_text, unit_text = pattern_with_row_no.groups()
+
+        qty = _try_float(qty_text)
+        unit_price = _parse_amount(unit_text)
+
+        if qty is not None and unit_price is not None and qty > 0:
+            line_total = float(qty) * float(unit_price)
+
+            conf_vals = [float(t.get("conf", 0) or 0) for t in row_tokens]
+            conf = sum(max(0.0, c) for c in conf_vals) / (len(conf_vals) * 100.0) if conf_vals else 0.0
+            conf = max(0.0, min(1.0, conf))
+
+            return {
+                "item": {
+                    "line_number": line_no,
+                    "description": description_text.strip() or "Item",
+                    "quantity": float(qty),
+                    "unit_price": float(unit_price),
+                    "line_total": float(line_total),
+                    "page": page_number
+                },
+                "confidence": conf
+            }
+
+    pattern_no_row_no = re.match(
+        r"^\s*(.+?)\s+(\d+(?:\.\d+)?)\s*[xX]\s*(\d+(?:[.,]\d+)?)\s*$",
+        normalized_row
+    )
+    if pattern_no_row_no:
+        description_text, qty_text, unit_text = pattern_no_row_no.groups()
+
+        qty = _try_float(qty_text)
+        unit_price = _parse_amount(unit_text)
+
+        if qty is not None and unit_price is not None and qty > 0:
+            line_total = float(qty) * float(unit_price)
+
+            conf_vals = [float(t.get("conf", 0) or 0) for t in row_tokens]
+            conf = sum(max(0.0, c) for c in conf_vals) / (len(conf_vals) * 100.0) if conf_vals else 0.0
+            conf = max(0.0, min(1.0, conf))
+
+            return {
+                "item": {
+                    "line_number": line_no,
+                    "description": description_text.strip() or "Item",
+                    "quantity": float(qty),
+                    "unit_price": float(unit_price),
+                    "line_total": float(line_total),
+                    "page": page_number
+                },
+                "confidence": conf
+            }
+
+    parsed_values = []
+    for idx, token in enumerate(row_tokens):
+        txt = str(token.get("text", "")).strip()
+        amt = _parse_amount(txt)
+        if amt is not None:
+            parsed_values.append((idx, amt, token))
+            continue
+
+        flt = _try_float(txt)
+        if flt is not None:
+            parsed_values.append((idx, flt, token))
+
+    if len(parsed_values) < 2:
+        return None
+
+    parsed_values_sorted = sorted(parsed_values, key=lambda x: x[0])
+
+    last_idx, last_val, last_token = parsed_values_sorted[-1]
+    second_idx, second_val, second_token = parsed_values_sorted[-2]
+
+    if len(parsed_values_sorted) >= 3:
+        third_idx, third_val, third_token = parsed_values_sorted[-3]
+
+        possible_qty = third_val
+        possible_unit = second_val
+        possible_total = last_val
+
+        if possible_qty > 0 and possible_unit >= 0 and possible_total >= 0:
+            calc = possible_qty * possible_unit
+            tolerance = max(0.05, possible_total * 0.15)
+
+            if abs(calc - possible_total) <= tolerance:
+                desc_tokens = row_tokens[:third_idx]
+                description = _clean_description_tokens(desc_tokens) or row_text
+
+                conf_vals = [third_token["conf"], second_token["conf"], last_token["conf"]]
+                conf = sum(max(0.0, float(x)) for x in conf_vals) / (len(conf_vals) * 100.0)
+                conf = max(0.0, min(1.0, conf))
+
+                return {
+                    "item": {
+                        "line_number": line_no,
+                        "description": description,
+                        "quantity": float(possible_qty),
+                        "unit_price": float(possible_unit),
+                        "line_total": float(possible_total),
+                        "page": page_number
+                    },
+                    "confidence": conf
+                }
+
+    possible_qty = second_val
+    possible_total = last_val
+
+    if possible_qty > 0 and possible_total >= 0:
+        desc_tokens = row_tokens[:second_idx]
+        description = _clean_description_tokens(desc_tokens) or row_text
+
+        unit_price = float(possible_total / possible_qty) if possible_qty != 0 else float(possible_total)
+
+        conf_vals = [second_token["conf"], last_token["conf"]]
+        conf = sum(max(0.0, float(x)) for x in conf_vals) / (len(conf_vals) * 100.0)
+        conf = max(0.0, min(1.0, conf))
+
+        return {
+            "item": {
+                "line_number": line_no,
+                "description": description,
+                "quantity": float(possible_qty),
+                "unit_price": unit_price,
+                "line_total": float(possible_total),
+                "page": page_number
+            },
+            "confidence": conf
+        }
+
+    return None
 
 
 def _extract_line_items(tokens: List[Dict[str, Any]], page_number: int):
@@ -443,55 +816,49 @@ def _extract_line_items(tokens: List[Dict[str, Any]], page_number: int):
     line_conf = []
     line_no = 1
 
-    i = 0
-    while i < len(tokens) - 2:
-        qty = _try_float(tokens[i]["text"])
-        unit = _parse_amount(tokens[i + 1]["text"])
-        total = _parse_amount(tokens[i + 2]["text"])
+    rows = _group_tokens_into_rows(tokens, y_tolerance=12)
 
-        if qty is not None and unit is not None and total is not None:
-            desc_tokens = []
-            j = i - 1
-
-            while j >= 0 and len(desc_tokens) < 5:
-                prev_text = tokens[j]["text"]
-                if _try_float(prev_text) is not None or _parse_amount(prev_text) is not None:
-                    break
-                desc_tokens.insert(0, prev_text)
-                j -= 1
-
-            desc = " ".join(desc_tokens).strip() or "Item"
-
-            line_items.append({
-                "line_number": line_no,
-                "description": desc,
-                "quantity": float(qty),
-                "unit_price": float(unit),
-                "line_total": float(total),
-                "page": page_number
-            })
-
-            confs = [tokens[i]["conf"], tokens[i + 1]["conf"], tokens[i + 2]["conf"]]
-            c = sum(max(0.0, float(x)) for x in confs) / (len(confs) * 100.0)
-            c = max(0.0, min(1.0, c))
-
-            line_conf.append({
-                "line_number": line_no,
-                "confidence": c
-            })
-
-            line_no += 1
-            i += 3
+    for row in rows:
+        extracted = _extract_line_from_row(row, page_number, line_no)
+        if not extracted:
             continue
 
-        i += 1
+        item = extracted["item"]
+        conf = extracted["confidence"]
+
+        description = str(item.get("description", "")).strip()
+        quantity = float(item.get("quantity", 0) or 0)
+        unit_price = float(item.get("unit_price", 0) or 0)
+        line_total = float(item.get("line_total", 0) or 0)
+
+        if not description:
+            continue
+        if quantity <= 0:
+            continue
+        if unit_price < 0 or line_total < 0:
+            continue
+
+        lowered = description.lower()
+        blocked_words = [
+            "subtotal", "grand total", "total due", "amount due", "balance due",
+            "vat", "tax", "discount", "invoice", "date", "bank"
+        ]
+        if any(word in lowered for word in blocked_words):
+            continue
+
+        line_items.append(item)
+        line_conf.append({
+            "line_number": line_no,
+            "confidence": conf
+        })
+        line_no += 1
 
     return line_items, line_conf
 
 
 def _try_float(text: str) -> Optional[float]:
     try:
-        s = text.strip().replace(",", "")
+        s = str(text).strip().replace(",", "")
         return float(s)
     except Exception:
         return None
