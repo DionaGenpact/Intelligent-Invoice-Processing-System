@@ -12,7 +12,7 @@ from utils.audit_logger import log_step
 
 
 def run_anomaly_detection(bundle_path: str, run_path: str, context: Dict[str, Any]) -> Dict[str, Any]:
-    log_step(run_path, "Anomaly Detection (G) started")  # REQ: audit
+    log_step(run_path, "Anomaly Detection (G) started") 
 
     # REQ: uses extracted invoice artifact (deterministic)
     invoice = _load_json(os.path.join(run_path, "extracted_invoice.json")) or context.get("extracted_invoice") or {}
