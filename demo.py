@@ -16,9 +16,9 @@ st.title("Intelligent Invoice Processing System (IIPS)")
 st.caption("Process invoices automatically using the multi-agent pipeline.")
 
 
-# --------------------------------------------------
+
 # Hidden defaults (not visible in UI)
-# --------------------------------------------------
+
 
 DEFAULT_EXPECTED_CURRENCY = "EUR"
 DEFAULT_VENDOR_ID = "UPLOADED_VENDOR"
@@ -59,7 +59,7 @@ sample_bundles = _list_sample_bundles()
 
 
 # Mode selection
-# --------------------------------------------------
+
 
 st.subheader("Choose how to run the demo")
 
@@ -72,9 +72,9 @@ mode = st.radio(
 
 st.divider()
 
-# --------------------------------------------------
+
 # DEMO INVOICE MODE
-# --------------------------------------------------
+
 
 if mode == "Try demo invoice":
 
@@ -104,9 +104,9 @@ if mode == "Try demo invoice":
                 st.exception(exc)
 
 
-# --------------------------------------------------
+
 # UPLOAD MODE
-# --------------------------------------------------
+
 
 else:
 
@@ -148,9 +148,9 @@ else:
                     st.exception(exc)
 
 
-# --------------------------------------------------
+
 # RESULTS VIEW
-# --------------------------------------------------
+
 
 run_path = st.session_state.get("last_run_path")
 

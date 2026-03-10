@@ -56,7 +56,7 @@ schemas/     JSON schemas for key artifacts
 runs/        Deterministic output folders: runs/run_<bundle_name>/
 utils/       Shared helpers (audit logging, OCR config, schema validation, uploads)
 main.py      CLI entry point
-streamlit_app.py  Demo UI
+demo.py  Demo UI
 ```
 
 ## Requirements
@@ -97,7 +97,7 @@ runs/run_bundle_01/
 ### Run the Streamlit demo
 
 ```bash
-streamlit run streamlit_app.py
+streamlit run demo.py
 ```
 
 The demo accepts a single uploaded invoice (PDF/image), creates a temporary deterministic bundle under `.demo_uploads/`, runs the full pipeline, and shows the generated artifacts.
